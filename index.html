@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ID Cards">
+  <title>ID Cards</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <style>
+    :root {
+      --bg: #f4f5f7;
+      --surface: #ffffff;
+      --text: #15171a;
+      --muted: #6b7280;
+      --accent: #2563eb;
+      --danger: #dc2626;
+      --border: #e5e7eb;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1115;
+        --surface: #1a1d23;
+        --text: #f3f4f6;
+        --muted: #9ca3af;
+        --accent: #3b82f6;
+        --danger: #ef4444;
+        --border: #2a2e36;
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+      -webkit-tap-highlight-color: transparent;
+    }
+    main { max-width: 640px; margin: 0 auto; }
+    header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    h1 { font-size: 1.5rem; margin: 0; }
+    button { font: inherit; cursor: pointer; }
+
+    .btn {
+      border: 0; border-radius: 12px; padding: 12px 16px;
+      background: var(--accent); color: #fff; font-weight: 600;
+    }
+    .btn.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+    .btn.danger { background: transparent; color: var(--danger); border: 1px solid var(--danger); }
+
+    .cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .card {
+      position: relative; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden; padding: 0; text-align: left; color: inherit;
+    }
+    .card img { display: block; width: 100%; aspect-ratio: 1.586; object-fit: cover; background: #000; }
+    .card .name { padding: 10px 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card .edit {
+      position: absolute; top: 6px; right: 6px; width: 34px; height: 34px; border-radius: 50%;
+      border: 0; background: rgba(0,0,0,.55); color: #fff; font-size: 18px; line-height: 34px;
+    }
+
+    .empty { text-align: center; color: var(--muted); padding: 48px 16px; }
+    .empty p { margin: 0 0 16px; }
+
+    /* Add / edit dialog */
+    dialog {
+      border: 0; border-radius: 16px; padding: 20px; width: min(92vw, 420px);
+      background: var(--surface); color: var(--text);
+    }
+    dialog::backdrop { background: rgba(0,0,0,.5); }
+    dialog h2 { margin: 0 0 16px; font-size: 1.2rem; }
+    label { display: block; font-size: .9rem; color: var(--muted); margin-bottom: 6px; }
+    input[type=text] {
+      width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--border);
+      background: var(--bg); color: var(--text); font: inherit; margin-bottom: 14px;
+    }
+    .file-pick {
+      display: flex; align-items: center; justify-content: center; min-height: 140px;
+      border: 2px dashed var(--border); border-radius: 12px; margin-bottom: 16px;
+      color: var(--muted); overflow: hidden; cursor: pointer;
+    }
+    .file-pick img { max-width: 100%; max-height: 200px; display: block; }
+    .file-pick input { display: none; }
+    .actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+    .actions .spacer { flex: 1; }
+
+    /* Fullscreen viewer */
+    #viewer {
+      position: fixed; inset: 0; z-index: 1000; background: #000;
+      display: none; touch-action: pan-x pinch-zoom; user-select: none;
+    }
+    #viewer.open { display: block; }
+    #viewer .stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    #viewer img { width: 100%; height: 100%; object-fit: contain; }
+    #viewer.rotated img {
+      /* swap the box dimensions, then rotate so a landscape card fills a portrait screen */
+      width: 100vh; height: 100vw; width: 100dvh; height: 100dvw;
+      flex: none; transform: rotate(90deg);
+    }
+    #viewer .bar {
+      position: absolute; left: 0; right: 0; display: flex; justify-content: space-between;
+      padding: 12px; padding-top: max(12px, env(safe-area-inset-top));
+      transition: opacity .2s; pointer-events: none;
+    }
+    #viewer .bar.top { top: 0; }
+    #viewer .bar.bottom { bottom: 0; justify-content: center; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+    #viewer .bar button {
+      pointer-events: auto; border: 0; background: rgba(40,40,40,.7); color: #fff;
+      border-radius: 999px; min-width: 44px; height: 44px; padding: 0 14px; font-size: 16px;
+    }
+    #viewer .title { color: #fff; background: rgba(40,40,40,.7); border-radius: 999px; padding: 8px 14px; font-size: 14px; }
+    #viewer.hide-ui .bar { opacity: 0; }
+    #viewer.hide-ui .bar button { pointer-events: none; }
+
+    .hint { color: var(--muted); font-size: .85rem; margin-top: 24px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>ID Cards</h1>
+      <button class="btn" id="addBtn">+ Add</button>
+    </header>
+
+    <div id="cards" class="cards"></div>
+    <div id="empty" class="empty" hidden>
+      <p>No cards yet. Add a photo or screenshot of your ID card.</p>
+      <button class="btn" id="addBtnEmpty">+ Add your first card</button>
+    </div>
+
+    <p class="hint">
+      Tap a card to show it fullscreen. Tap the screen to hide/show the buttons, swipe to switch cards,
+      ↻ to rotate. Images are stored only on this device, in this browser.
+      Tip: use “Add to Home Screen” for one-tap access that also works offline.
+    </p>
+  </main>
+
+  <dialog id="editor">
+    <form method="dialog" id="editorForm">
+      <h2 id="editorTitle">Add card</h2>
+      <label for="cardName">Name</label>
+      <input type="text" id="cardName" placeholder="e.g. Rav-Kav, Passport, Gym" autocomplete="off" required>
+      <label>Image</label>
+      <label class="file-pick" id="filePick">
+        <span id="filePickText">Tap to choose a photo</span>
+        <img id="filePreview" alt="" hidden>
+        <input type="file" id="cardFile" accept="image/*">
+      </label>
+      <div class="actions">
+        <button type="button" class="btn danger" id="deleteBtn" hidden>Delete</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn secondary" id="cancelBtn">Cancel</button>
+        <button type="submit" class="btn" id="saveBtn">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="viewer" aria-modal="true" role="dialog">
+    <div class="stage"><img id="viewerImg" alt=""></div>
+    <div class="bar top">
+      <button id="closeBtn" aria-label="Close">✕</button>
+      <span class="title" id="viewerTitle"></span>
+      <button id="rotateBtn" aria-label="Rotate">↻</button>
+    </div>
+    <div class="bar bottom">
+      <button id="prevBtn" aria-label="Previous">‹</button>
+      <button id="nextBtn" aria-label="Next" style="margin-left:12px">›</button>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    // ---------- Storage (IndexedDB, image blobs stay on the device) ----------
+    const DB_NAME = 'id-cards', STORE = 'cards';
+    let dbPromise;
+    function db() {
+      dbPromise ??= new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: 'id' });
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+      return dbPromise;
+    }
+    async function tx(mode, fn) {
+      const d = await db();
+      return new Promise((resolve, reject) => {
+        const t = d.transaction(STORE, mode);
+        const result = fn(t.objectStore(STORE));
+        t.oncomplete = () => resolve(result?.result);
+        t.onerror = () => reject(t.error);
+      });
+    }
+    const getAll = () => tx('readonly', s => s.getAll());
+    const put = card => tx('readwrite', s => s.put(card));
+    const remove = id => tx('readwrite', s => s.delete(id));
+
+    // Ask the browser not to evict our data under storage pressure.
+    navigator.storage?.persist?.();
+
+    // ---------- State ----------
+    let cards = [];
+    const urls = new Map(); // id -> object URL
+    const $ = id => document.getElementById(id);
+
+    function urlFor(card) {
+      if (!urls.has(card.id)) urls.set(card.id, URL.createObjectURL(card.blob));
+      return urls.get(card.id);
+    }
+
+    async function load() {
+      cards = (await getAll()).sort((a, b) => a.order - b.order);
+      render();
+    }
+
+    function render() {
+      const list = $('cards');
+      list.innerHTML = '';
+      $('empty').hidden = cards.length > 0;
+      cards.forEach((card, i) => {
+        const el = document.createElement('button');
+        el.className = 'card';
+        el.innerHTML = `<img alt=""><div class="name"></div><span class="edit" role="button" aria-label="Edit">✎</span>`;
+        el.querySelector('img').src = urlFor(card);
+        el.querySelector('.name').textContent = card.name;
+        el.addEventListener('click', e => {
+          if (e.target.classList.contains('edit')) openEditor(card);
+          else openViewer(i);
+        });
+        list.appendChild(el);
+      });
+    }
+
+    // ---------- Add / edit ----------
+    let editing = null, pendingBlob = null;
+
+    function openEditor(card = null) {
+      editing = card;
+      pendingBlob = null;
+      $('editorTitle').textContent = card ? 'Edit card' : 'Add card';
+      $('cardName').value = card?.name ?? '';
+      $('cardFile').value = '';
+      $('deleteBtn').hidden = !card;
+      setPreview(card ? urlFor(card) : null);
+      $('editor').showModal();
+    }
+
+    function setPreview(src) {
+      $('filePreview').hidden = !src;
+      $('filePickText').hidden = !!src;
+      if (src) $('filePreview').src = src;
+    }
+
+    $('cardFile').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      pendingBlob = file;
+      setPreview(URL.createObjectURL(file));
+      if (!$('cardName').value) $('cardName').value = file.name.replace(/\.[^.]+$/, '');
+    });
+
+    $('editorForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const name = $('cardName').value.trim();
+      if (!name) return;
+      if (!editing && !pendingBlob) { alert('Please choose an image.'); return; }
+      const card = editing
+        ? { ...editing, name }
+        : { id: crypto.randomUUID?.() ?? String(Date.now()) + Math.random(), name, order: Date.now() };
+      if (pendingBlob) {
+        // Store as a plain Blob (iOS Safari cannot always store File objects in IndexedDB).
+        card.blob = new Blob([await pendingBlob.arrayBuffer()], { type: pendingBlob.type });
+        if (urls.has(card.id)) { URL.revokeObjectURL(urls.get(card.id)); urls.delete(card.id); }
+      }
+      try {
+        await put(card);
+      } catch (err) {
+        alert('Could not save the card: ' + err.message);
+        return;
+      }
+      $('editor').close();
+      load();
+    });
+
+    $('cancelBtn').addEventListener('click', () => $('editor').close());
+    $('deleteBtn').addEventListener('click', async () => {
+      if (!editing || !confirm(`Delete "${editing.name}"?`)) return;
+      await remove(editing.id);
+      $('editor').close();
+      load();
+    });
+    $('addBtn').addEventListener('click', () => openEditor());
+    $('addBtnEmpty').addEventListener('click', () => openEditor());
+
+    // ---------- Fullscreen viewer ----------
+    const viewer = $('viewer');
+    let current = 0, wakeLock = null, hideTimer = null;
+
+    async function openViewer(i) {
+      current = i;
+      show();
+      viewer.classList.add('open');
+      viewer.classList.toggle('rotated', localStorage.getItem('rotated:' + cards[i].id) === '1');
+      // Real fullscreen where supported (Android/desktop). On iPhone the overlay already covers
+      // the screen; from the Home Screen app there is no browser UI at all.
+      try {
+        const el = document.documentElement;
+        if (el.requestFullscreen) await el.requestFullscreen({ navigationUI: 'hide' });
+        else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      } catch {}
+      // Keep the screen on while the inspector looks at it.
+      try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+      history.pushState({ viewer: true }, '');
+      flashUi();
+    }
+
+    function show() {
+      const card = cards[current];
+      $('viewerImg').src = urlFor(card);
+      $('viewerTitle').textContent = card.name;
+      viewer.classList.toggle('rotated', localStorage.getItem('rotated:' + card.id) === '1');
+      const multi = cards.length > 1;
+      $('prevBtn').hidden = $('nextBtn').hidden = !multi;
+    }
+
+    function closeViewer(fromPopstate = false) {
+      if (!viewer.classList.contains('open')) return;
+      viewer.classList.remove('open');
+      wakeLock?.release?.(); wakeLock = null;
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      else if (document.webkitFullscreenElement) document.webkitExitFullscreen?.();
+      if (!fromPopstate && history.state?.viewer) history.back();
+    }
+
+    function step(d) {
+      if (cards.length < 2) return;
+      current = (current + d + cards.length) % cards.length;
+      show();
+    }
+
+    function flashUi() {
+      viewer.classList.remove('hide-ui');
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => viewer.classList.add('hide-ui'), 2500);
+    }
+
+    $('closeBtn').addEventListener('click', e => { e.stopPropagation(); closeViewer(); });
+    $('rotateBtn').addEventListener('click', e => {
+      e.stopPropagation();
+      const rotated = viewer.classList.toggle('rotated');
+      try { localStorage.setItem('rotated:' + cards[current].id, rotated ? '1' : '0'); } catch {}
+      flashUi();
+    });
+    $('prevBtn').addEventListener('click', e => { e.stopPropagation(); step(-1); flashUi(); });
+    $('nextBtn').addEventListener('click', e => { e.stopPropagation(); step(1); flashUi(); });
+
+    // Tap toggles the buttons; horizontal swipe switches cards.
+    let startX = null, startY = null;
+    viewer.addEventListener('touchstart', e => {
+      if (e.touches.length !== 1) { startX = null; return; }
+      startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    }, { passive: true });
+    viewer.addEventListener('touchend', e => {
+      if (startX === null) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      const dy = e.changedTouches[0].clientY - startY;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) step(dx < 0 ? 1 : -1);
+      startX = null;
+    });
+    viewer.addEventListener('click', () => {
+      if (viewer.classList.contains('hide-ui')) flashUi();
+      else { clearTimeout(hideTimer); viewer.classList.add('hide-ui'); }
+    });
+
+    document.addEventListener('keydown', e => {
+      if (!viewer.classList.contains('open')) return;
+      if (e.key === 'Escape') closeViewer();
+      if (e.key === 'ArrowRight') step(1);
+      if (e.key === 'ArrowLeft') step(-1);
+    });
+
+    // Android back button / back gesture closes the viewer instead of leaving the page.
+    window.addEventListener('popstate', () => closeViewer(true));
+
+    // Leaving fullscreen (e.g. system gesture) closes the viewer too.
+    document.addEventListener('fullscreenchange', () => {
+      if (!document.fullscreenElement) closeViewer();
+    });
+
+    // Wake lock is released when the tab is hidden; re-acquire on return.
+    document.addEventListener('visibilitychange', async () => {
+      if (document.visibilityState === 'visible' && viewer.classList.contains('open')) {
+        try { wakeLock = await navigator.wakeLock?.request('screen'); } catch {}
+      }
+    });
+
+    // ---------- Offline support ----------
+    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+
+    load().then(() => {
+      // index.html#open opens the first card immediately (handy as a home-screen shortcut).
+      if (location.hash === '#open' && cards.length) openViewer(0);
+    }).catch(err => {
+      $('cards').textContent = 'Storage is unavailable in this browser mode: ' + err.message;
+    });
+  })();
+  </script>
+</body>
+</html>

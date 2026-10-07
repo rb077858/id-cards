@@ -1,0 +1,15 @@
+{
+  "name": "ID Cards",
+  "short_name": "ID Cards",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Show first card", "url": "./index.html#open" }
+  ]
+}
